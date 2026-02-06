@@ -12,9 +12,35 @@ large or commercial projects.
 ```py
 import sbs
 
+exec = sbs.Executable('main')
+exec.add_src('path/to/your/src/files') # set "recursive = True" to allow recursive search
+                                       # for globbing with * and **.
+exec.add_flags('-Wall -Werror') # optional; any flags you want
+
+exec.compile()
+```
+
+## Example builds
+
+### A simple one-file program
+```py
+import sbs
+
 exec = sbs.Executable('main')\
-	.add_src('path/to/your/src/files')\
-	.add_flags('-Wall -Werror') # optional; any flags you want
+	.add_src('src/main.c')\
+	.add_flags('-Wall -Werror')
+
+exec.compile()
+```
+
+### Compile a large folder structure that links Cocoa, and changes the compiler
+```py
+import sbs
+DEFAULT_COMPILER = 'clang'
+
+exec = sbs.Executable('cocoa_example')\
+	.add_src('src/**/*.c', recursive=True)\
+	.add_flags('-Wall -Werror -framework Cocoa')
 
 exec.compile()
 ```
