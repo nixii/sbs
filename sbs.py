@@ -1,112 +1,204 @@
+"""
+	Examples
 
-# imports
-import os, glob, subprocess, time
+Create a simple executable from a directory
+	import sbs
 
-# constants
-DEFAULT_COMPILER = 'cc'
-BIN_DIR = '.sbs/objs/'
+	sbs.init()
 
-# move a file path to a bin dir path
-def bin_path(path: str) -> str:
-	return os.path.realpath(BIN_DIR + path)
+	Executable("main")\
+		.add_src("src/**/*.c")\
+		.compile()
 
-# an object
-class CompilerObject():
 
-	# properties
-	name: str
-	file: str
-	compiler: str
-	
-	# create the object
-	def __init__(self: 'CompilerObject', name: str, file: str, compiler: str | None) -> 'CompilerObject':
-		self.name = name.replace(' ', '\\ ')
-		self.file = file.replace(' ', '\\ ')
-		self.compiler = compiler if compiler is not None else DEFAULT_COMPILER
-	
-	# compile the object
-	def compile(self: 'CompilerObject', opts: str = '') -> bool:
-		os.makedirs(os.path.dirname(self.name), exist_ok=True)
+More advanced, many-directory build
+	import sbs
 
-		# get last edited timestamp
-		last_edited_code = 0 if not os.path.exists(self.file) else os.path.getmtime(self.file)
-		last_edited_object = 0 if not os.path.exists(self.name) else os.path.getmtime(self.name)
+	sbs.init()
 
-		# stop compiling if it is already up to date
-		if last_edited_code <= last_edited_object:
-			print(f'[OBJ] {self.name} already compiled!')
-			return
-		
-		# run the command
-		cmd = f'{self.compiler} -o {self.name} {self.file} -c {' '.join(opts)}'
-		print(f'[OBJ] Compiling: {self.name}')
-		p = subprocess.Popen(cmd, shell=True)
-		p.wait()
-	
-	# string version
-	def __str__(self):
-		return self.name
+	exec = Executable("main")
 
-# A single executable to compile
-class Executable():
-	
-	# properties
-	name: str
-	compiler: str
-	objects: list[CompilerObject]
-	opts: list[str]
+	exec.add_src("src/**/*.c")
+	exec.add_src("game/**/*.c")
 
-	# initialize the executable
-	def __init__(self: 'Executable', name: str) -> 'Executable':
+	if sbs.OS_MAC:
+		exec.add_frameworks("Cocoa")
+		exec.set_compiler("clang")
+
+	exec.add_flags("-Wall -Winclude")
+	exec.add_includes("-Iinclude")
+	exec.add_libs("-Llib")
+
+	exec.compile()
+"""
+
+# import all used libraries
+import os, glob, sys, subprocess, platform
+
+# get the system
+_sys = platform.system()
+
+# various settings
+class Settings:
+	DIR = "sbs"
+	COMPILER: str = "cc"
+
+# what os is running the command
+class Os:
+	MACOS =_sys.lower() == "darwin"
+	WINDOWS = _sys.lower() == "windows"
+	LINUX = _sys.lower() == "linux"
+
+# make a dir if it doesn't exist
+def enforce_dir(dir: str):
+	os.makedirs(dir, exist_ok=True)
+
+# turn a path into the obj file path
+def binpath(p: str):
+
+	# get the dir and filename seperately
+	dir, filename = os.path.split(p)
+
+	# get the directory locally
+	reldir = os.path.relpath(dir, start=os.getcwd())
+
+	# move the local dir path to the bin directory
+	tdir = os.path.join(Settings.DIR, reldir)
+
+	# get the final path from that new dir with the .o extension
+	tf = os.path.join(tdir, os.path.splitext(filename)[0] + '.o')
+	return tf
+
+# options for the compiler
+class Options:
+	def __init__(self,
+		flags: str="",
+		includes: str="",
+		libs: str="",
+		frameworks: str=""):
+
+		self.flags = flags
+		self.includes = includes
+		self.libs = libs
+		self.frameworks = frameworks
+		self.cc = Settings.COMPILER
+
+	# duplicate it if needed
+	def clone(self):
+		return Options(
+			flags = self.flags,
+			includes = self.includes,
+			libs = self.libs,
+			frameworks = self.frameworks)
+
+	# adders
+	def add_flag(self, flag: str):
+		self.flags += f' {flag}'
+	def add_include(self, include: str):
+		self.includes += f' -I{include}'
+	def add_lib(self, lib: str):
+		self.libs += f' -L{lib}'
+	def add_framework(self, framework: str):
+		self.frameworks += f'-framework {framework}'
+	def set_compiler(self, compiler: str):
+		self.cc = compiler
+
+# a single object file to compile
+class OFile:
+	def __init__(self, name: str, src: str, options: Options | None = None):
 		self.name = name
-		self.compiler = DEFAULT_COMPILER
-		self.objects = []
-		self.opts = []
+		self.src = src
+		self.options = options or Options()
 
-	# add src files
-	def add_srcs(self: 'Executable', *srcs: str, recursive: bool = False) -> 'Executable':
-		for src in srcs:
-			self.add_src(src, recursive=recursive)
-		
+	# compile the object
+	def compile(self):
+
+		# create the dir if it doesn't exist
+		my_dir = os.path.dirname(self.name)
+		if not my_dir.isspace():
+			enforce_dir(my_dir)
+
+		# don't recompile if there is no nee
+		if os.path.exists(self.name)\
+			and os.path.getmtime(self.src) < os.path.getmtime(self.name):
+			print(f'[OBJ] Object {self.name} already compiled!!!')
+			return
+
+		# create the command
+		cmd = f'{self.options.cc} -o {self.name} -c {self.src} {self.options.flags}'
+		print(f'[OBJ] Compiling {self.name}...')
+
+		# run the command and wait to finish
+		shell = subprocess.Popen(cmd, shell=True)
+		shell.wait()
+
+		# success
+		print(f'[DONE] Compiled {self.name}!')
+
+# the final executable to compile
+class Executable:
+	def __init__(self, name, options: Options | None = None):
+		self.name = os.path.relpath(name)
+		self.srcs = {}
+		self.options = options if options is not None else Options()
+
+	# add src files, globbing enabled
+	def add_src(self, *paths: str):
+
+		# double loop so variadic args
+		for path in paths:
+			for p in glob.glob(path, recursive=True):
+
+				# create the object
+				new_path = binpath(p)
+				o = OFile(new_path, p, self.options)
+				self.srcs[new_path] = o
 		return self
-	
-	# add a single source
-	def add_src(self: 'Executable', src: str, recursive: bool = False) -> 'Executable':
-		files = glob.glob(src, recursive=recursive)
 
-		for file in files:
-			obj_name = os.path.splitext(file)[0] + '.o'
-			obj_name = bin_path(obj_name)
-			self.objects.append(CompilerObject(obj_name, file, self.compiler))
-		
+	# adders for thing in the options, with va args
+	def add_flags(self, *flags: str):
+		for flaggroup in flags:
+			for flag in flaggroup.split(" "):
+				self.options.add_flag(flag)
 		return self
-	
-	# add flags
-	def add_flags(self: 'Executable', flags: str) -> 'Executable':
-		for flag in flags.split(' '):
-			self.opts.append(flag)
+	def add_includes(self, *includes: str):
+		for includegroup in includes:
+			for include in includegroup.split(" "):
+				self.options.add_include(include)
+		return self
+	def add_lib(self, *libs: str):
+		for libgroup in libs:
+			for lib in libgroup.split(" "):
+				self.options.add_lib(lib)
+		return self
+	def add_frameworks(self, *frameworks: str):
+		for frameworkgroup in frameworks:
+			for framework in frameworkgroup.split(" "):
+				self.options.add_framework(framework)
+		return self
+	def set_compiler(self, compiler: str):
+		self.options.set_compiler(compiler)
 		return self
 
-	# compile 
-	def compile(self: 'Executable') -> 'Executable':
+	# compile the executable
+	def compile(self):
 
-		# remove duplicates
-		objects = list(dict.fromkeys(self.objects))
+		# compile all the object files
+		for src in self.srcs.values():
+			src.compile()
 
-		# assert the final dir
-		dn = os.path.dirname(self.name)
-		if not dn == '':
-			os.makedirs(dn, exist_ok=True)
+		# ensure the directory exists
+		my_dir = os.path.dirname(self.name)
+		if not my_dir.isspace() and my_dir != '':
+			enforce_dir(my_dir)
 
-		# compile each object
-		for obj in objects:
-			obj.compile(self.opts)
-		
-		# compile self
-		cmd = f'{self.compiler} -o {self.name} {' '.join(map(str, objects))} {' '.join(self.opts)}'
-		print(f'[EXE] Compiling {self.name}')
-		p = subprocess.Popen(cmd, shell=True)
-		p.wait()
+		# create the command
+		cmd = f'{self.options.cc} -o {self.name} {" ".join(self.srcs.keys())} {self.options.flags} {self.options.includes} {self.options.libs} {self.options.frameworks}'
+		print(f'[EXE] Compiling {self.name}...')
 
-		# return self
-		return self
+		# run the command and wait
+		shell = subprocess.Popen(cmd, shell=True)
+		shell.wait()
+
+		# success
+		print(f'[DONE] Compiled {self.name}!')

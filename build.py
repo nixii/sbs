@@ -1,11 +1,8 @@
 
-# Import the build system
 import sbs
 
-# Create the executable
-exec = sbs.Executable('./main')\
-	.add_srcs('./src/**/*.c', recursive=True)\
-	.add_flags('-Wall -Wextra')
+exec = sbs.Executable('main')\
+	.add_src('src/**/*.c')\
+	.add_flags('-Wall', '-Werror')
 
-# Compile the program
 exec.compile()

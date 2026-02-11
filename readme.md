@@ -1,4 +1,5 @@
 # sbs
+> Last updated 10 Feb 2026
 
 ## What is this?
 This is a system that lets you quickly and easily build a C program.
@@ -13,14 +14,13 @@ large or commercial projects.
 import sbs
 
 exec = sbs.Executable('main')
-exec.add_src('path/to/your/src/files') # set "recursive = True" to allow recursive search
-                                       # for globbing with * and **.
-exec.add_flags('-Wall -Werror') # optional; any flags you want
+exec.add_src('path/to/your/src/files') # add src files to compile (each is separate)
+exec.add_flags('-Wall', '-Werror') # optional; any flags you want
 
 exec.compile()
 ```
 
-## Example builds
+## Example build scripts
 
 ### A simple one-file program
 ```py
@@ -28,7 +28,7 @@ import sbs
 
 exec = sbs.Executable('main')\
 	.add_src('src/main.c')\
-	.add_flags('-Wall -Werror')
+	.add_flags('-Wall', '-Werror')
 
 exec.compile()
 ```
@@ -36,11 +36,12 @@ exec.compile()
 ### Compile a large folder structure that links Cocoa, and changes the compiler
 ```py
 import sbs
-DEFAULT_COMPILER = 'clang'
+sbs.Settings.COMPILER = 'clang'
 
 exec = sbs.Executable('cocoa_example')\
-	.add_src('src/**/*.c', recursive=True)\
-	.add_flags('-Wall -Werror -framework Cocoa')
+	.add_src('src/**/*.c')\
+	.add_flags('-Wall', '-Werror')\
+	.add_frameworks('Cocoa')
 
 exec.compile()
 ```
