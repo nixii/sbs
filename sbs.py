@@ -33,7 +33,10 @@ More advanced, many-directory build
 """
 
 # import all used libraries
-import os, glob, sys, subprocess, platform
+import subprocess
+import platform
+import glob
+import os
 
 # get the system
 _sys = platform.system()
