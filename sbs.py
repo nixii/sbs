@@ -36,6 +36,7 @@ More advanced, many-directory build
 import subprocess
 import platform
 import glob
+import sys
 import os
 
 # get the system
@@ -132,8 +133,11 @@ class OFile:
 		print(f'[OBJ] Compiling {self.name}...')
 
 		# run the command and wait to finish
-		shell = subprocess.Popen(cmd, shell=True)
-		shell.wait()
+		try:
+			subprocess.check_call(cmd, shell=True)
+		except subprocess.CalledProcessError:
+			print(f'\033[31m[ERROR!]\033[m Failed to compile {self.name}')
+			sys.exit(0)
 
 		# success
 		print(f'[DONE] Compiled {self.name}!')
@@ -200,8 +204,11 @@ class Executable:
 		print(f'[EXE] Compiling {self.name}...')
 
 		# run the command and wait
-		shell = subprocess.Popen(cmd, shell=True)
-		shell.wait()
+		try:
+			subprocess.check_call(cmd, shell=True)
+		except subprocess.CalledProcessError:
+			print(f'\033[31m[ERROR!]\033[m Failed to compile {self.name}')
+			sys.exit(0)
 
 		# success
 		print(f'[DONE] Compiled {self.name}!')
